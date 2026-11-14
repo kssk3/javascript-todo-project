@@ -4,9 +4,7 @@
 
 ## 시연 영상
 
-<video src="[demo/demo.mp4](https://github.com/user-attachments/assets/8a8a089d-ad05-43a3-80bd-1b098cbaa953)" controls muted width="420"></video>
-
-▶ [demo/demo.mp4](demo/demo.mp4) (약 31초)
+▶ [demo/demo.mp4]([demo/demo.mp4](https://github.com/user-attachments/assets/8a8a089d-ad05-43a3-80bd-1b098cbaa953)) (약 31초)
 
 
 영상 순서: **추가** → **완료 체크** → **수정**(더블클릭 / 연필 버튼) → **조회**(진행 중·완료·전체 필터) → **삭제**(✕ / 완료한 일 지우기) → **새로고침 후 데이터 유지**
