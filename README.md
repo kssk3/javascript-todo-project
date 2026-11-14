@@ -4,13 +4,12 @@
 
 ## 시연 영상
 
-<video src="demo/demo.mp4" controls muted width="420"></video>
+<video src="[demo/demo.mp4](https://github.com/user-attachments/assets/8a8a089d-ad05-43a3-80bd-1b098cbaa953)" controls muted width="420"></video>
 
 ▶ [demo/demo.mp4](demo/demo.mp4) (약 31초)
 
-영상 순서: **추가** → **완료 체크** → **수정**(더블클릭 / 연필 버튼) → **조회**(진행 중·완료·전체 필터) → **삭제**(✕ / 완료한 일 지우기) → **새로고침 후 데이터 유지**
 
-> GitHub에서 README 안에서 바로 재생되지 않으면, README 편집창에 `demo/demo.mp4`를 끌어다 놓아 생성되는 링크로 바꾸면 됩니다.
+영상 순서: **추가** → **완료 체크** → **수정**(더블클릭 / 연필 버튼) → **조회**(진행 중·완료·전체 필터) → **삭제**(✕ / 완료한 일 지우기) → **새로고침 후 데이터 유지**
 
 ## 기능
 
