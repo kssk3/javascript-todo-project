@@ -55,19 +55,38 @@
         return { total, done, percent };
     };
 
+    // id 가 겹치는 항목(구버전 데이터 등)은 처음 것만 두고 나머지에 새 id 를 발급한다.
+    // 그대로 두면 한 항목을 토글·삭제할 때 같은 id 의 다른 항목까지 함께 바뀐다.
+    const dedupeIds = (list) => {
+        const seen = new Set();
+        return list.map((todo) => {
+            const id = seen.has(todo.id) ? createId() : todo.id;
+            seen.add(id);
+            return id === todo.id ? todo : { ...todo, id };
+        });
+    };
+
     // 저장된 값이 깨져 있어도 앱이 죽지 않도록 모양을 검증·정규화한다.
     // (이전 버전은 id 를 숫자로 저장했으므로 String() 으로 맞춰 호환)
+    // 빈 id 는 이후 삭제·수정 대상을 찾을 수 없고, 빈 텍스트는 빈 줄로 보이므로 걸러낸다.
+    const isValidStoredTodo = (item) =>
+        Boolean(item) &&
+        item.id != null &&
+        String(item.id).trim() !== "" &&
+        typeof item.text === "string" &&
+        item.text.trim() !== "";
+
     const parseTodos = (raw) => {
         try {
             const parsed = JSON.parse(raw);
             if (!Array.isArray(parsed)) return [];
-            return parsed
-                .filter((item) => item && item.id != null && typeof item.text === "string")
-                .map((item) => ({
+            return dedupeIds(
+                parsed.filter(isValidStoredTodo).map((item) => ({
                     id: String(item.id),
                     text: item.text,
                     done: Boolean(item.done),
-                }));
+                })),
+            );
         } catch {
             return [];
         }
@@ -149,12 +168,17 @@
         return button;
     };
 
+    // 크기·색·커서는 css/style.css 의 .todo-check 가 담당한다.
+    const syncCheckbox = (checkbox, todo) => {
+        checkbox.checked = todo.done;
+        checkbox.setAttribute("aria-label", `${todo.text} 완료 체크`);
+    };
+
     const createCheckbox = (todo) => {
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
-        checkbox.checked = todo.done;
-        checkbox.setAttribute("aria-label", `${todo.text} 완료 체크`);
-        checkbox.className = "todo-check size-5 shrink-0 cursor-pointer accent-blue-400";
+        checkbox.className = "todo-check shrink-0";
+        syncCheckbox(checkbox, todo);
         return checkbox;
     };
 
@@ -179,20 +203,11 @@
         return input;
     };
 
-    const createTodoElement = (todo) => {
-        const li = document.createElement("li");
-        li.dataset.id = todo.id; // 이벤트 위임에서 "몇 번 할 일인지" 찾을 때 사용
-        li.className = "flex items-center gap-2 rounded-xl px-4 py-2 hover:bg-gray-100";
-        if (todo.id === newId) li.classList.add("is-new");
+    // 체크박스를 뺀 항목의 나머지 부분(보기 모드 / 수정 모드)
+    const createTodoContent = (todo) => {
+        if (todo.id === editingId) return [createEditInput(todo)];
 
-        li.append(createCheckbox(todo));
-
-        if (todo.id === editingId) {
-            li.append(createEditInput(todo));
-            return li;
-        }
-
-        li.append(
+        return [
             createTextView(todo),
             createIconButton({
                 label: "수정",
@@ -204,19 +219,64 @@
                 className: "todo-delete hover:text-red-500",
                 iconPath: ICON_PATHS.close,
             }),
-        );
+        ];
+    };
+
+    const createTodoElement = (todo) => {
+        const li = document.createElement("li");
+        li.dataset.id = todo.id; // 이벤트 위임에서 "몇 번 할 일인지" 찾을 때 사용
+        li.className = "flex items-center gap-2 rounded-xl px-4 py-2 hover:bg-gray-100";
+        if (todo.id === newId) li.classList.add("is-new");
+
+        li.append(createCheckbox(todo), ...createTodoContent(todo));
         return li;
     };
 
     /* =====================================================================
      * 6. 렌더링
      * ===================================================================== */
+    // 포커스 복원: 다시 그리면 포커스를 가진 요소가 DOM 에서 사라져, 키보드 사용자는
+    // Space 토글·Enter 삭제 같은 동작 직후 포커스를 잃고 다시 Tab 으로 찾아와야 한다.
+    // 그래서 다시 그리기 전에 "몇 번째 항목의 어떤 컨트롤"이었는지 기억했다가 되돌린다.
+    // (값 = 복원할 컨트롤. 수정창은 저장/취소 뒤 같은 항목의 수정 버튼으로 돌아간다)
+    const FOCUS_RESTORE = {
+        "todo-check": "todo-check",
+        "todo-edit-btn": "todo-edit-btn",
+        "todo-delete": "todo-delete",
+        "todo-edit": "todo-edit-btn",
+    };
+
+    const captureFocus = () => {
+        const active = document.activeElement;
+        const li = active?.closest("li");
+        const kind = Object.keys(FOCUS_RESTORE).find((cls) => active?.classList.contains(cls));
+        if (!li || !kind || !todoList.contains(li)) return () => {}; // 목록 밖(마우스로 바깥 클릭 등)이면 건드리지 않음
+
+        const index = [...todoList.children].indexOf(li);
+        const { id } = li.dataset;
+        return () => {
+            const items = [...todoList.children];
+            if (items.length === 0) {
+                todoInput.focus(); // 마지막 항목을 지웠으면 입력창으로 이어준다
+                return;
+            }
+            // 같은 항목이 남아 있으면 그 항목, 삭제됐으면 같은 위치(없으면 마지막) 항목
+            const target =
+                items.find((item) => item.dataset.id === id) ??
+                items[Math.min(index, items.length - 1)];
+            target.querySelector(`.${FOCUS_RESTORE[kind]}`)?.focus();
+        };
+    };
+
     const render = () => {
+        const restoreFocus = captureFocus();
+
         // 조회: 현재 필터 조건을 통과한 항목만 화면에 그린다.
         const visibleTodos = todos.filter(FILTERS[filter]);
 
-        // 목록 전체를 한 번에 교체 → 항목마다 appendChild 하지 않아 리플로우가 1회로 줄어든다.
+        // 목록 전체를 한 번에 교체 → 항목마다 appendChild 하지 않고 DOM 변경을 한 번으로 모은다.
         todoList.replaceChildren(...visibleTodos.map(createTodoElement));
+        restoreFocus();
         newId = null; // 애니메이션은 추가된 직후 1회만
 
         const { total, done, percent } = getStats(todos);
@@ -236,13 +296,26 @@
         focusEditInput();
     };
 
-    // 항목 1개만 새로 그려 제자리에서 교체한다.
-    // 수정 시작/종료처럼 "그 항목만 바뀌는" 동작에서 목록 전체를 다시 만들지 않기 위함.
-    // (전체를 다시 만들면 blur 직후 사용자가 누르던 다른 버튼이 사라져 클릭이 유실된다)
+    // 항목 1개만 다시 그린다. 수정 시작/종료처럼 "그 항목만 바뀌는" 동작에서 목록 전체를
+    // 다시 만들지 않기 위함이다. 전체를 다시 만들면 blur 직후 사용자가 누르던 버튼이
+    // DOM 에서 사라져 click 이 유실된다(mousedown → blur → 재렌더 → mouseup).
+    // 같은 이유로 항목 안에서도 체크박스 노드는 그대로 두고 나머지만 바꾼다:
+    // 수정 중인 항목의 체크박스를 곧바로 누르는 경우에도 그 click 이 살아남는다.
     const renderItem = (id) => {
         const li = todoList.querySelector(`li[data-id="${CSS.escape(id)}"]`);
         const todo = todos.find((item) => item.id === id);
-        if (li && todo) li.replaceWith(createTodoElement(todo));
+        if (!li || !todo) return;
+
+        const restoreFocus = captureFocus();
+        const checkbox = li.querySelector(".todo-check");
+        syncCheckbox(checkbox, todo);
+        // replaceChildren(checkbox, ...) 는 체크박스를 한 번 떼었다 붙이므로 mousedown 대상이
+        // 분리되어 click 이 취소된다. 체크박스는 건드리지 않고 나머지 노드만 교체한다.
+        [...li.children].forEach((child) => {
+            if (child !== checkbox) child.remove();
+        });
+        li.append(...createTodoContent(todo));
+        restoreFocus();
     };
 
     // 수정창이 화면에 있으면 포커스를 주고 내용을 전체 선택
@@ -362,9 +435,15 @@
         if (!event.target.classList.contains("todo-edit")) return;
         if (event.isComposing) return; // 한글 조합 중의 Enter 는 글자 확정용이므로 무시
 
+        if (event.key !== "Enter" && event.key !== "Escape") return;
+
+        // 저장/취소하면 포커스가 수정 버튼으로 옮겨 가는데, 이어지는 keypress(Enter)가
+        // 그 버튼에 전달되면 click 이 발생해 수정창이 곧바로 다시 열린다. 기본 동작을 막는다.
+        event.preventDefault();
+
         if (event.key === "Enter") {
             finishEdit(getTodoId(event.target), event.target.value);
-        } else if (event.key === "Escape") {
+        } else {
             cancelEdit();
         }
     });
@@ -377,6 +456,7 @@
 
     clearButton.addEventListener("click", () => {
         commit(removeDoneTodos(todos));
+        todoInput.focus(); // 이 버튼은 지우고 나면 숨겨지므로, 포커스가 사라지지 않게 입력창으로 이어준다
     });
 
     /* =====================================================================
