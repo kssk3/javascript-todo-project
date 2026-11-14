@@ -50,11 +50,8 @@ const removeTodo = (list, id) => list.filter((todo) => todo.id !== id);
 const getStats = (list) => {
     const total = list.length;
     const done = list.reduce((count, todo) => count + (todo.done ? 1 : 0), 0);
-    return {
-        total,
-        done,
-        percent: total === 0 ? 0 : Math.round((done / total) * 100),
-    };
+    const percent = total === 0 ? 0 : Math.round((done / total) * 100);
+    return { total, done, percent };
 };
 ```
 
@@ -71,23 +68,15 @@ const getStats = (list) => {
 
 - **DOM 조작**: 데이터(상태)를 먼저 바꾸고 `render()`가 `createElement`로 요소를 만들어 `replaceChildren` / `replaceWith`로 화면에 반영 (상태 → 화면 단방향)
 - **XSS 방지**: 사용자 입력은 `textContent`로만 넣어 HTML이 해석되지 않음
-- **예외 처리**: 빈 입력·공백 입력, 깨진 JSON, 저장소 접근 불가, 수정 시 빈 값(→ 원복)
+- **예외 처리**: 빈 입력·공백 입력, 깨진 JSON, 저장소 접근 불가, 수정 시 빈 값(→ 원복), 저장 데이터의 빈 id·빈 텍스트(→ 제외)·중복 id(→ 새 id 발급)
 
 ### 3. 이벤트·성능 최적화
 
 | 최적화               | 내용                                                                                                                                                                           |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **이벤트 위임**      | 항목마다 리스너를 달지 않고 `ul` 하나에서 `change` / `click` / `dblclick` / `keydown` / `focusout`을 처리. 리스너 수가 항목 수와 무관하게 고정되고, 새로 만든 항목도 자동 동작 |
-| **일괄 DOM 교체**    | `replaceChildren(...)`으로 목록을 한 번에 교체 → 리플로우 1회                                                                                                                  |
-| **부분 갱신**        | 수정 시작/종료는 해당 `li` 하나만 교체. (전체를 다시 그리면 blur 직후 다른 버튼이 사라져 클릭이 유실되는 버그도 함께 방지)                                                     |
+| **일괄 DOM 교체**    | `replaceChildren(...)`으로 목록을 한 번에 교체해 항목마다 `appendChild` 하지 않고 DOM 변경을 한 번으로 모음 (토글·삭제·추가는 목록 전체를 다시 그림)                              |
+| **부분 갱신**        | 수정 시작/종료는 해당 `li` 하나만 다시 그리고, 그 안에서도 체크박스 노드는 유지. 전체(또는 체크박스)를 다시 만들면 blur 직후 사용자가 누르던 버튼이 사라져 클릭이 유실되기 때문 |
 | **`defer` 스크립트** | HTML 파싱 후 실행되어 `DOMContentLoaded` 래퍼 불필요                                                                                                                           |
 | **한글 IME 대응**    | 수정창에서 `event.isComposing` 중의 `Enter`는 무시 (조합 중 글자 중복/누락 방지)                                                                                               |
-| **접근성**           | `aria-label`, `aria-pressed`(필터), `role="progressbar"`                                                                                                                       |
-
-## 이전 버전에서 개선한 점
-
-- 필수 파일 구조(`index.html`, `css/style.css`, `js/todo.js`)로 정리
-- **수정**·**조회(필터)** 기능 추가 (기존에는 추가·삭제·완료만 가능)
-- 원본 배열을 직접 바꾸던 `toggleTodo`(`todo.done = !todo.done`)를 불변 방식으로 변경
-- `id`를 `Date.now()` → 무작위 문자열로 변경 (같은 밀리초에 추가 시 충돌 방지). 이전 버전의 숫자 id 데이터도 자동 변환
-- `body`의 `position: fixed`를 제거해 항목이 많아져도 스크롤 가능
+| **접근성**           | `aria-label`, `aria-pressed`(필터), `role="progressbar"`, 다시 그린 뒤 키보드 포커스 복원 (Space 토글·Enter 삭제/수정 후에도 같은 컨트롤에서 이어서 조작)                       |
